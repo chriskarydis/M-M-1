@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import matplotlib.pyplot as plt
 import time
@@ -5,62 +6,89 @@ import resource
 from matplotlib import pylab
 from pylab import *
 
+# Read I_values from a file
+def read_I_values(filename):
+    I_values = []
+    with open(filename, 'r') as file:
+        for line in file:
+            I_values.append(float(line.strip()))  # Convert each line to float and append to list
+    return I_values
+
+# Function to clear the contents of output files
+def clear_output_files():
+    file_names = ['T_R.txt', 'TQ_R.txt', 'N_R.txt', 'NQ_R.txt', 'NQMAX_R.txt']
+    for file_name in file_names:
+        open(file_name, 'w').close()
+
+# Initialize random number generator for exponential distribution
 rng = np.random.default_rng()
 
+# Generate exponentially distributed random numbers
 def exponential():
 	U = rng.random()
 	return -np.log(U)
 	    
+# Calculate time of next arrival event		
 def next_arrival(l, cur_t, t_arr):
 	return cur_t + l * exponential()
-	    
+
+# Calculate service completion time for a client
 def service_till(m, cur_t, t_ser):
 	return cur_t + m * exponential()
-	    
+
+# Update current time based on next arrival or service completion
 def time_jump(t_arr, t_ser, cur_t):
 	if t_arr <= t_ser:
 		cur_time = t_arr
 	elif cur_t <= t_ser:
 		cur_t = t_ser
 	return cur_t
-	
+
+# Add client to the queue upon arrival
 def arrival(cur_t, queue, client, queue_data, client_data):
 	queue.append(client)
 	queue_data.append([cur_t, len(queue)])
 	client_data.append([cur_t, 0, 0])
-	    
+
+# Service a client from the queue
 def service(cur_t, t_ser, queue, client_data, queue_data):
 	client = queue.pop(0)
 	queue_data.append([cur_t, len(queue)])
 	client_data[client][1] = cur_t
 	client_data[client][2] = t_ser
 
-def run_simulation(l_values):
+# Run simulations for different mean arrival intervals
+def run_simulation(I_values):
 	print("Starting simulation loop...")
-	for idx, l in enumerate(l_values):
-		# Open the output files outside the simulation loop
-		with 	open(f'T_R.txt', 'a') as t_r_file, \
-			open(f'TQ_R.txt', 'a') as tq_r_file, \
-			open(f'N_R.txt', 'a') as n_r_file, \
-			open(f'NQ_R.txt', 'a') as nq_r_file, \
-			open(f'NQMAX_R.txt', 'a') as nqmax_r_file:
+
+	# Ensure the 'sim_data' directory exists
+	if not os.path.exists('sim_data'):
+		os.makedirs('sim_data')
+
+	# Loop over different arrival intervals
+	for idx, l in enumerate(I_values):
+		with open(f'T_R.txt', 'a') as t_r_file, \
+			 open(f'TQ_R.txt', 'a') as tq_r_file, \
+			 open(f'N_R.txt', 'a') as n_r_file, \
+			 open(f'NQ_R.txt', 'a') as nq_r_file, \
+			 open(f'NQMAX_R.txt', 'a') as nqmax_r_file:
 		
 		
 			print(f"Running simulation {idx + 1} with l = {l}...")
 			start_time = time.time()  # Record start time
 			start_resources = resource.getrusage(resource.RUSAGE_SELF)  # Record start resources
-			queue = []
-			queue_data = []
-			client_data = []
+			queue = [] # Initialize queue
+			queue_data = [] # Queue data for plotting
+			client_data = [] # Client data for statistics
 			
-			client = 0  # next client to come
-			t_ser = 0   # time when service will be IDLE
-			t_arr = 0   # time of next arrival
-			cur_t = 0   # current time
+			client = 0  # Next client to come
+			t_ser = 0   # Time when service will be IDLE
+			t_arr = 0   # Time of next arrival
+			cur_t = 0   # Current time
+			t_max = 100000 # Maximum simulation time
+			sim_num = idx + 1 # Simulation number
 			
-			t_max = 100000
-			sim_num = idx + 1
-			
+			# Start first arrival and service
 			t_arr = next_arrival(l, cur_t, t_arr)
 			cur_t = t_arr
 			arrival(cur_t, queue, client, queue_data, client_data)
@@ -69,11 +97,12 @@ def run_simulation(l_values):
 			t_ser = service_till(1.0, cur_t, t_ser)
 			service(cur_t, t_ser, queue, client_data, queue_data)
 			
-			total_customers = 0 # total number of customers in the system
-			last_event_time = 0 # time of the last event
+			total_customers = 0 # Total number of customers in the system
+			last_event_time = 0 # Time of the last event
 
+			# Simulation loop
 			while cur_t < t_max:
-				total_customers += len(queue) * (cur_t - last_event_time) # keeps a running total of the "customer-time" for the entire simulation
+				total_customers += len(queue) * (cur_t - last_event_time) # Keeps a running total of the "customer-time" for the entire simulation
 				last_event_time = cur_t	
 				cur_t = time_jump(t_arr, t_ser, cur_t)
 				if cur_t == t_arr:
@@ -86,8 +115,8 @@ def run_simulation(l_values):
 				else:
 					cur_t = t_arr
 
+			# Calculate mean number of customers
 			mean_customers = total_customers / cur_t 
-			print(f"Mean number of customers in the system: {mean_customers}")
 			
 			# Write simulation data to files
 			with open(f'sim_data/{sim_num}_client_data.dat', 'w') as f:
@@ -100,11 +129,11 @@ def run_simulation(l_values):
 					f.write(f"{i[0]},{i[1]}\n")
 			f.close()
 			
-			# Calculate and write statistics
+			# Calculate statistics
 			T = 0
 			Tq = 0
 			Ts = 0
-			s_clients = 0  # number of serviced clients
+			s_clients = 0  # Number of serviced clients
 			
 			with open(f'sim_data/{sim_num}_client_data.dat', 'r') as f:
 				lines = f.readlines()
@@ -155,6 +184,7 @@ def run_simulation(l_values):
 			
 			mean_Nq = sum(Nq) / len(lines)
 			
+			# Write statistics to file
 			with open(f'sim_data/{sim_num}_sim_data.dat', 'w') as f:
 				f.write(f"l = {l}, m = 1.0, t_max = {t_max}\n")
 				f.write(f"λ = {1/l}, μ = 1.0\n")
@@ -165,31 +195,29 @@ def run_simulation(l_values):
 				f.write(f"Number of serviced clients = {s_clients}\n")
 			f.close()
 			
+			# Prefix to generate the 'ρ'
 			prefix = "{:.2f},".format((idx + 1) * 0.05)
 
-			#################################################################################
 			t_r_file.write(prefix + f"{(1.0*l)/(l-1.0)},{T}\n")
 			tq_r_file.write(prefix + f"{(1.0/l)/((l-1.0)/(1.0*l))},{Tq}\n")
 			n_r_file.write(prefix + f"{(1/l)/(1-(1/l))},{mean_customers}\n")
 			nq_r_file.write(prefix + f"{((1/l)*(1/l))/(1-(1/l))},{mean_Nq}\n")
 			nqmax_r_file.write(prefix + f"{Nq_max}\n")
-			#################################################################################
+			
 		print(f"Simulation {idx + 1} completed.")
 	print("Simulation loop finished.")
 
-# Define list of mean arriving time intervals
-l_values = [20.00, 10.00, 6.66, 5.00, 4.00, 3.33, 2.86, 2.50, 2.22, 2.00, 1.82, 1.66, 1.54, 1.43, 1.33, 1.25, 1.18, 1.11, 1.05]  # Example list
+# Define the filename containing l_values
+I_values_file = 'I_values.txt'
 
-# Clear the contents of the output files at the start of the program
-with open('T_R.txt', 'w') as t_r_file, \
-     open('TQ_R.txt', 'w') as tq_r_file, \
-     open('N_R.txt', 'w') as n_r_file, \
-     open('NQ_R.txt', 'w') as nq_r_file, \
-     open('NQMAX_R.txt', 'w') as nqmax_r_file:
-    pass  # Just opening the files to clear them
+# Read I_values from the file
+I_values = read_I_values(I_values_file)
+
+# Clear the output files
+clear_output_files()
 
 # Run simulations for each value in the list
-run_simulation(l_values)
+run_simulation(I_values)
 
 # Define a function to plot data from a file
 def plot_data(filename, xlabel, ylabel, title):
@@ -213,6 +241,11 @@ def plot_data(filename, xlabel, ylabel, title):
 def set_figure_label(plot_count, total_plots):
 	fig = pylab.gcf()
 	fig.canvas.manager.set_window_title(f"plot {plot_count}/{total_plots}")   
+
+# Define a function to save the plot
+def save_plot(filename):
+    plt.savefig(filename)
+    print(f"Plot saved as '{filename}'")
    
 # Define the total plots and the plot count
 total_plots=5
@@ -222,29 +255,33 @@ plot_count=0
 plot_count+=1
 plot_data('N_R.txt', 'R', 'N', 'N - R')
 set_figure_label(plot_count, total_plots)
+save_plot('N_R_plot.png')
 plt.show()
 
 # Plot NQ_R.txt
 plot_count+=1
 plot_data('NQ_R.txt', 'R', 'NQ', 'NQ - R')
 set_figure_label(plot_count, total_plots)
+save_plot('NQ_R_plot.png')
 plt.show()
 
 # Plot NQMAX_R.txt
 plot_count+=1
 plot_data('NQMAX_R.txt', 'R', 'NQMAX', 'NQMAX - R')
 set_figure_label(plot_count, total_plots)
+save_plot('NQMAX_R_plot.png')
 plt.show()
 
 # Plot T_R.txt
 plot_count+=1
 plot_data('T_R.txt', 'R', 'T', 'T - R')
 set_figure_label(plot_count, total_plots)
+save_plot('T_R_plot.png')
 plt.show()
 
 # Plot TQ_R.txt
 plot_count+=1
 plot_data('TQ_R.txt', 'R', 'TQ', 'TQ - R')
 set_figure_label(plot_count, total_plots)
+save_plot('TQ_R_plot.png')
 plt.show()
-
