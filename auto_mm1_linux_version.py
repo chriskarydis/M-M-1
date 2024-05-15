@@ -74,7 +74,7 @@ def run_simulation(I_values):
 			 open(f'NQMAX_R.txt', 'a') as nqmax_r_file:
 		
 		
-			print(f"Running simulation {idx + 1} with l = {l}...")
+			print(f"Running simulation {idx + 1} with Ι = {l}...")
 			start_time = time.time()  # Record start time
 			start_resources = resource.getrusage(resource.RUSAGE_SELF)  # Record start resources
 			queue = [] # Initialize queue
